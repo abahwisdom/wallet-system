@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  wallet-api:
+    build:
+      context: .  # assumes Dockerfile is in the root of your project
+    container_name: wallet-api
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USERNAME=wallet_admin
+      - DB_PASSWORD=wallet_password
+      - DB_NAME=wallet_system
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+    networks:
+      - wallet-net
+
+  db:
+    image: postgres:alpine
+    container_name: wallet-db
+    restart: always
+    environment:
+      - POSTGRES_USER=wallet_admin
+      - POSTGRES_PASSWORD=wallet_password
+      - POSTGRES_DB=wallet_system
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - wallet-net
+
+  redis:
+    image: redis:alpine
+    container_name: wallet-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - wallet-net
+
+volumes:
+  pgdata:
+
+networks:
+  wallet-net:
+    driver: bridge
