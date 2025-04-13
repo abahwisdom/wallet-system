@@ -1,8 +1,20 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
-import { Wallet } from '../entities/wallet.entity';
-import { Transaction } from '../entities/transaction.entity';
+import { Repository, EntityManager } from 'typeorm';
+import { Wallet } from './entities/wallet.entity';
+import { Transaction } from './entities/transaction.entity';
 import { isUUID } from 'class-validator';
+import { Subject } from 'rxjs';
+
+// Shared Subject for transaction status updates
+export const transactionStatusSubject = new Subject<{
+  jobId: string;
+  walletId: string;
+  type: string;
+  status: string;
+  payload?: any;
+  timestamp: string;
+  error?: string;
+}>();
 
 type TransactionType = 'deposit' | 'withdrawal' | 'transfer';
 
@@ -30,13 +42,29 @@ export function validateAmount(
 
 export async function findWalletOrFail(
   walletId: string,
-  walletRepository: Repository<Wallet>,
+  walletRepositoryOrManager: Repository<Wallet> | EntityManager,
   label: string = 'Wallet',
+  useTransaction: boolean = false,
 ): Promise<Wallet> {
-  const wallet = await walletRepository.findOneBy({ id: walletId });
+  let wallet;
+
+  if (useTransaction && walletRepositoryOrManager instanceof EntityManager) {
+    wallet = await walletRepositoryOrManager
+      .getRepository(Wallet)
+      .createQueryBuilder('wallet')
+      .setLock('pessimistic_write')
+      .where('wallet.id = :id', { id: walletId })
+      .getOne();
+  } else if (walletRepositoryOrManager instanceof Repository) {
+    wallet = await walletRepositoryOrManager.findOneBy({ id: walletId });
+  } else {
+    throw new Error('Invalid repository or manager provided');
+  }
+
   if (!wallet) {
     throw new NotFoundException(`${label} not found`);
   }
+
   return wallet;
 }
 

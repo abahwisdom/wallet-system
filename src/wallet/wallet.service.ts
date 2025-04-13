@@ -1,25 +1,62 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
 import {
   validateWalletId,
   validateAmount,
-  findWalletOrFail,
-  ensureSufficientBalance,
-  createTransaction,
-} from './utils/wallet-utils';
+  transactionStatusSubject,
+} from './wallet.utils';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
 
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+
+    public readonly dataSource: DataSource, // Changed from private to public
+
+    @InjectQueue('transaction-queue')
+    private readonly transactionQueue: Queue, // Inject BullMQ queue
   ) {}
+
+  async enqueueTransaction(
+    type: string,
+    payload: any,
+    walletId: string,
+  ): Promise<string> {
+    const job = await this.transactionQueue.add(
+      type,
+      { ...payload, walletId },
+      {
+        attempts: 3, // Retry up to 3 times
+        backoff: {
+          type: 'exponential', // Exponential backoff
+          delay: 1000, // Start with a 1-second delay
+        },
+      },
+    );
+
+    // Push transaction status update to the Subject
+    transactionStatusSubject.next({
+      jobId: job.id,
+      type,
+      payload,
+      walletId,
+      status: 'enqueued',
+      timestamp: new Date().toISOString(),
+    });
+
+    return job.id; // Return the job ID
+  }
 
   /**
    * Creates a new wallet with optional initial balance
@@ -33,42 +70,37 @@ export class WalletService {
   /**
    * Deposits funds into a wallet
    */
-  async deposit(walletId: string, amount: number): Promise<Transaction> {
+  async deposit(
+    walletId: string,
+    amount: number,
+  ): Promise<{ message: string; jobId: string }> {
     validateWalletId(walletId);
     validateAmount(amount);
 
-    const wallet = await findWalletOrFail(walletId, this.walletRepository);
-
-    wallet.balance += amount;
-    await this.walletRepository.save(wallet);
-
-    return createTransaction(
-      wallet,
-      amount,
+    const jobId = await this.enqueueTransaction(
       'deposit',
-      this.transactionRepository,
+      { walletId, amount },
+      walletId,
     );
+    return { message: 'Your deposit is currently being processed', jobId };
   }
 
   /**
    * Withdraws funds from a wallet
    */
-  async withdraw(walletId: string, amount: number): Promise<Transaction> {
+  async withdraw(
+    walletId: string,
+    amount: number,
+  ): Promise<{ message: string; jobId: string }> {
     validateWalletId(walletId);
     validateAmount(amount);
 
-    const wallet = await findWalletOrFail(walletId, this.walletRepository);
-    ensureSufficientBalance(wallet, amount);
-
-    wallet.balance -= amount;
-    await this.walletRepository.save(wallet);
-
-    return createTransaction(
-      wallet,
-      amount,
-      'withdrawal',
-      this.transactionRepository,
+    const jobId = await this.enqueueTransaction(
+      'withdraw',
+      { walletId, amount },
+      walletId,
     );
+    return { message: 'Your withdrawal is currently being processed', jobId };
   }
 
   /**
@@ -78,7 +110,7 @@ export class WalletService {
     fromWalletId: string,
     toWalletId: string,
     amount: number,
-  ): Promise<Transaction> {
+  ): Promise<{ message: string; jobId: string }> {
     validateWalletId(fromWalletId);
     validateWalletId(toWalletId);
     validateAmount(amount);
@@ -87,36 +119,16 @@ export class WalletService {
       throw new BadRequestException('Cannot transfer to the same wallet');
     }
 
-    const fromWallet = await findWalletOrFail(
-      fromWalletId,
-      this.walletRepository,
-      'Sender wallet',
-    );
-    const toWallet = await findWalletOrFail(
-      toWalletId,
-      this.walletRepository,
-      'Recipient wallet',
-    );
-
-    ensureSufficientBalance(fromWallet, amount);
-
-    // Execute transfer
-    fromWallet.balance -= amount;
-    toWallet.balance += amount;
-
-    // Save both wallets
-    await Promise.all([
-      this.walletRepository.save(fromWallet),
-      this.walletRepository.save(toWallet),
-    ]);
-
-    return createTransaction(
-      fromWallet,
-      amount,
+    const jobId = await this.enqueueTransaction(
       'transfer',
-      this.transactionRepository,
-      toWalletId,
+      {
+        fromWalletId,
+        toWalletId,
+        amount,
+      },
+      fromWalletId,
     );
+    return { message: 'Your transfer is currently being processed', jobId };
   }
 
   /**

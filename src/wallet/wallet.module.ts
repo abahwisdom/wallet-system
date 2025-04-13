@@ -4,10 +4,23 @@ import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
 import { WalletService } from './wallet.service';
 import { WalletController } from './wallet.controller';
+import { BullModule } from '@nestjs/bullmq';
+import { TransactionProcessor } from './transaction.processor';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Wallet, Transaction])],
+  imports: [
+    TypeOrmModule.forFeature([Wallet, Transaction]),
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
+    BullModule.registerQueue({
+      name: 'transaction-queue',
+    }),
+  ],
   controllers: [WalletController],
-  providers: [WalletService],
+  providers: [WalletService, TransactionProcessor],
 })
 export class WalletModule {}

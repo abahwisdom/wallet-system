@@ -9,9 +9,14 @@ import {
   Headers,
   UsePipes,
   ValidationPipe,
+  Sse,
+  Logger,
 } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { IsNumber, IsPositive } from 'class-validator';
+import { Observable } from 'rxjs';
+import { map, filter } from 'rxjs/operators';
+import { transactionStatusSubject } from './wallet.utils';
 
 export class CreateWalletDto {
   @IsNumber()
@@ -30,6 +35,8 @@ export class TransferDto {
   @IsPositive()
   amount: number;
 }
+
+const logger = new Logger('WalletController');
 
 @Controller('wallets')
 export class WalletController {
@@ -80,5 +87,24 @@ export class WalletController {
     @Query('limit') limit: number,
   ) {
     return this.walletService.getTransactionHistory(id, page, limit);
+  }
+
+  @Sse('transactions/status/:walletId')
+  streamTransactionStatus(
+    @Param('walletId') walletId: string,
+  ): Observable<{ data: any }> {
+    logger.log(
+      `Client connected to streamTransactionStatus with walletId: ${walletId}`,
+    );
+    return transactionStatusSubject.asObservable().pipe(
+      filter((statusUpdate) => {
+        const matches = statusUpdate.walletId === walletId;
+        if (matches) {
+          logger.log(`Streaming update for walletId: ${statusUpdate.walletId}`);
+        }
+        return matches;
+      }),
+      map((statusUpdate) => ({ data: statusUpdate })),
+    );
   }
 }
