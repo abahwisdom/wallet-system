@@ -7,9 +7,16 @@ import {
   validateWalletId,
   validateAmount,
   transactionStatusSubject,
+  getCachedWalletBalance,
+  setCachedWalletBalance,
+  invalidateWalletBalanceCache,
+  getCachedTransactionHistory,
+  setCachedTransactionHistory,
+  invalidateTransactionHistoryCache,
 } from './wallet.utils';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { RedisService } from '@liaoliaots/nestjs-redis';
 
 @Injectable()
 export class WalletService {
@@ -26,7 +33,60 @@ export class WalletService {
 
     @InjectQueue('transaction-queue')
     private readonly transactionQueue: Queue, // Inject BullMQ queue
+
+    private readonly redisService: RedisService, // Inject RedisService
   ) {}
+
+  async getCachedWalletBalance(walletId: string): Promise<number | null> {
+    return getCachedWalletBalance(this.redisService, walletId);
+  }
+
+  async setCachedWalletBalance(
+    walletId: string,
+    balance: number,
+  ): Promise<void> {
+    return setCachedWalletBalance(this.redisService, walletId, balance);
+  }
+
+  async invalidateWalletBalanceCache(walletId: string): Promise<void> {
+    return invalidateWalletBalanceCache(this.redisService, walletId);
+  }
+
+  async getCachedTransactionHistory(
+    walletId: string,
+    page: number,
+    limit: number,
+    filterType?: string,
+  ): Promise<any[] | null> {
+    return getCachedTransactionHistory(
+      this.redisService,
+      walletId,
+      page,
+      limit,
+      filterType,
+    );
+  }
+
+  async setCachedTransactionHistory(
+    walletId: string,
+    page: number,
+    limit: number,
+    filterType: string | undefined,
+    history: any[],
+  ): Promise<void> {
+    return setCachedTransactionHistory(
+      this.redisService,
+      walletId,
+      page,
+      limit,
+      filterType,
+      history,
+    );
+  }
+
+  async invalidateTransactionHistoryCache(walletId: string): Promise<void> {
+    return invalidateTransactionHistoryCache(this.redisService, walletId);
+  }
 
   async enqueueTransaction(
     type: string,
@@ -41,6 +101,14 @@ export class WalletService {
         backoff: {
           type: 'exponential', // Exponential backoff
           delay: 1000, // Start with a 1-second delay
+        },
+        removeOnComplete: {
+          age: 3600, // seconds (1 hour after completion)
+          count: 1000, // or keep only last 1000 completed jobs
+        },
+        removeOnFail: {
+          age: 86400, // 1 day
+          count: 100, // or keep last 100 failed jobs
         },
       },
     );
@@ -82,6 +150,8 @@ export class WalletService {
       { walletId, amount },
       walletId,
     );
+    await this.invalidateWalletBalanceCache(walletId); // Invalidate balance cache
+    await this.invalidateTransactionHistoryCache(walletId); // Invalidate transaction history cache
     return { message: 'Your deposit is currently being processed', jobId };
   }
 
@@ -100,6 +170,8 @@ export class WalletService {
       { walletId, amount },
       walletId,
     );
+    await this.invalidateWalletBalanceCache(walletId); // Invalidate balance cache
+    await this.invalidateTransactionHistoryCache(walletId); // Invalidate transaction history cache
     return { message: 'Your withdrawal is currently being processed', jobId };
   }
 
@@ -128,6 +200,10 @@ export class WalletService {
       },
       fromWalletId,
     );
+    await this.invalidateWalletBalanceCache(fromWalletId); // Invalidate sender's balance cache
+    await this.invalidateWalletBalanceCache(toWalletId); // Invalidate receiver's balance cache
+    await this.invalidateTransactionHistoryCache(fromWalletId); // Invalidate sender's transaction history cache
+    await this.invalidateTransactionHistoryCache(toWalletId); // Invalidate receiver's transaction history cache
     return { message: 'Your transfer is currently being processed', jobId };
   }
 
@@ -145,6 +221,16 @@ export class WalletService {
       | 'transfer_in'
       | 'transfer_out',
   ) {
+    const cachedHistory = await this.getCachedTransactionHistory(
+      walletId,
+      page,
+      limit,
+      filterType,
+    );
+    if (cachedHistory) {
+      return { data: cachedHistory, meta: { cached: true } };
+    }
+
     const query = this.transactionRepository
       .createQueryBuilder('transaction')
       .orderBy('transaction.createdAt', 'DESC')
@@ -183,7 +269,7 @@ export class WalletService {
     const hasNextPage = page < totalPages;
     const hasPreviousPage = page > 1;
 
-    return {
+    const finalResult = {
       data: enriched,
       meta: {
         total,
@@ -194,5 +280,14 @@ export class WalletService {
         hasPreviousPage,
       },
     };
+
+    await this.setCachedTransactionHistory(
+      walletId,
+      page,
+      limit,
+      filterType,
+      finalResult.data,
+    ); // Cache the result
+    return finalResult;
   }
 }

@@ -4,6 +4,7 @@ import { Wallet } from './entities/wallet.entity';
 import { Transaction } from './entities/transaction.entity';
 import { isUUID } from 'class-validator';
 import { Subject } from 'rxjs';
+import { RedisService } from '@liaoliaots/nestjs-redis';
 
 // Shared Subject for transaction status updates
 export const transactionStatusSubject = new Subject<{
@@ -90,4 +91,92 @@ export async function createTransaction(
   });
 
   return transactionRepository.save(transaction);
+}
+
+export async function getRedisClient(redisService: RedisService) {
+  return redisService.getOrThrow();
+}
+
+export function formatTransactionHistoryCacheKey(
+  walletId: string,
+  page: number,
+  limit: number,
+  filterType?: string,
+): string {
+  return `wallet:transactions:${walletId}:page:${page}:limit:${limit}:filter:${filterType || 'all'}`;
+}
+
+export async function getCachedWalletBalance(
+  redisService: RedisService,
+  walletId: string,
+): Promise<number | null> {
+  const redisClient = await getRedisClient(redisService);
+  const cachedBalance = await redisClient.get(`wallet:balance:${walletId}`);
+  return cachedBalance ? parseFloat(cachedBalance) : null;
+}
+
+export async function setCachedWalletBalance(
+  redisService: RedisService,
+  walletId: string,
+  balance: number,
+): Promise<void> {
+  const redisClient = await getRedisClient(redisService);
+  await redisClient.set(`wallet:balance:${walletId}`, balance.toString());
+}
+
+export async function invalidateWalletBalanceCache(
+  redisService: RedisService,
+  walletId: string,
+): Promise<void> {
+  const redisClient = await getRedisClient(redisService);
+  await redisClient.del(`wallet:balance:${walletId}`);
+}
+
+export async function getCachedTransactionHistory(
+  redisService: RedisService,
+  walletId: string,
+  page: number,
+  limit: number,
+  filterType?: string,
+): Promise<any[] | null> {
+  const redisClient = await getRedisClient(redisService);
+  const cacheKey = formatTransactionHistoryCacheKey(
+    walletId,
+    page,
+    limit,
+    filterType,
+  );
+  const cachedHistory = await redisClient.get(cacheKey);
+  return cachedHistory ? JSON.parse(cachedHistory) : null;
+}
+
+export async function setCachedTransactionHistory(
+  redisService: RedisService,
+  walletId: string,
+  page: number,
+  limit: number,
+  filterType: string | undefined,
+  history: any[],
+): Promise<void> {
+  const redisClient = await getRedisClient(redisService);
+  const cacheKey = formatTransactionHistoryCacheKey(
+    walletId,
+    page,
+    limit,
+    filterType,
+  );
+  await redisClient.set(
+    cacheKey,
+    JSON.stringify(history),
+    'EX',
+    3600, // Cache expires in 1 hour
+  );
+}
+
+export async function invalidateTransactionHistoryCache(
+  redisService: RedisService,
+  walletId: string,
+): Promise<void> {
+  const redisClient = await getRedisClient(redisService);
+  await redisClient.del(`wallet:transactions:${walletId}`);
 }

@@ -17,8 +17,6 @@ export class TransactionProcessor extends WorkerHost {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    this.updateTransactionStatus(job, 'processing');
-
     try {
       switch (job.name) {
         case 'deposit':
@@ -37,7 +35,7 @@ export class TransactionProcessor extends WorkerHost {
       this.updateTransactionStatus(job, 'completed');
     } catch (error) {
       this.updateTransactionStatus(job, 'failed', error.message);
-      throw error;
+      throw error; // Rethrow the error to mark the job as failed
     }
   }
 
@@ -109,13 +107,20 @@ export class TransactionProcessor extends WorkerHost {
     status: string,
     errorMessage?: string,
   ): void {
-    transactionStatusSubject.next({
-      jobId: job.id,
-      walletId: job.data.walletId,
-      type: job.name,
-      status,
-      error: errorMessage,
-      timestamp: new Date().toISOString(),
-    });
+    console.log(job.attemptsMade, job.opts.attempts);
+    console.log('Job status:', status);
+    if (
+      status === 'completed' ||
+      (status === 'failed' && job.attemptsMade >= job.opts.attempts - 1)
+    ) {
+      transactionStatusSubject.next({
+        jobId: job.id,
+        walletId: job.data.walletId,
+        type: job.name,
+        status,
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }
