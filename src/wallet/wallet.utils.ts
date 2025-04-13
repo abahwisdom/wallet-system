@@ -79,13 +79,15 @@ export async function createTransaction(
   amount: number,
   type: TransactionType,
   transactionRepository: Repository<Transaction>,
-  relatedWalletId?: string,
+  toWalletId?: string, // used only for transfers
 ): Promise<Transaction> {
   const transaction = transactionRepository.create({
     wallet,
+    walletId: wallet.id,
     amount,
     type,
-    relatedWalletId,
+    toWalletId: type === 'transfer' ? toWalletId : null,
   });
+
   return transactionRepository.save(transaction);
 }

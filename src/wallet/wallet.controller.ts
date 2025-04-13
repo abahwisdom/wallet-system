@@ -82,11 +82,28 @@ export class WalletController {
 
   @Get(':id/transactions')
   async getTransactionHistory(
-    @Param('id') id: string,
-    @Query('page') page: number,
-    @Query('limit') limit: number,
+    @Param('id') walletId: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('type')
+    type?:
+      | 'deposit'
+      | 'withdrawal'
+      | 'transfer_in'
+      | 'transfer_out'
+      | 'transfer',
   ) {
-    return this.walletService.getTransactionHistory(id, page, limit);
+    const { data, meta } = await this.walletService.getTransactionHistory(
+      walletId,
+      page,
+      limit,
+      type,
+    );
+
+    return {
+      data,
+      meta,
+    };
   }
 
   @Sse('transactions/status/:walletId')

@@ -134,18 +134,65 @@ export class WalletService {
   /**
    * Gets paginated transaction history for a wallet
    */
-  async getTransactionHistory(walletId: string, page: number, limit: number) {
-    validateWalletId(walletId);
+  async getTransactionHistory(
+    walletId: string,
+    page = 1,
+    limit = 10,
+    filterType?:
+      | 'deposit'
+      | 'withdrawal'
+      | 'transfer'
+      | 'transfer_in'
+      | 'transfer_out',
+  ) {
+    const query = this.transactionRepository
+      .createQueryBuilder('transaction')
+      .orderBy('transaction.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .where(
+        '(transaction.walletId = :walletId OR transaction.toWalletId = :walletId)',
+        { walletId },
+      ); // Base condition for all related transactions
 
-    if (page <= 0 || limit <= 0) {
-      throw new BadRequestException('Page and limit must be positive numbers');
+    if (filterType === 'deposit' || filterType === 'withdrawal') {
+      query.andWhere('transaction.type = :type', { type: filterType });
+    } else if (filterType === 'transfer_in') {
+      query.andWhere('transaction.type = :type', { type: 'transfer' });
+      query.andWhere('transaction.toWalletId = :walletId', { walletId }); // Explicitly filter for incoming transfers
+    } else if (filterType === 'transfer_out') {
+      query.andWhere('transaction.type = :type', { type: 'transfer' });
+      query.andWhere('transaction.walletId = :walletId', { walletId }); // Explicitly filter for outgoing transfers
+    } else if (filterType === 'transfer') {
+      query.andWhere('transaction.type = :type', { type: 'transfer' });
     }
 
-    return this.transactionRepository.find({
-      where: { wallet: { id: walletId } },
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: 'DESC' },
+    const [result, total] = await query.getManyAndCount();
+
+    const enriched = result.map((tx) => {
+      if (tx.type !== 'transfer') return tx;
+
+      const isIncoming = tx.toWalletId === walletId;
+      return {
+        ...tx,
+        direction: isIncoming ? 'transfer_in' : 'transfer_out',
+      };
     });
+
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    return {
+      data: enriched,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage,
+        hasPreviousPage,
+      },
+    };
   }
 }
