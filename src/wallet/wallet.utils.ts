@@ -19,12 +19,24 @@ export const transactionStatusSubject = new Subject<{
 
 type TransactionType = 'deposit' | 'withdrawal' | 'transfer';
 
+/**
+ * Validates the format of a wallet ID.
+ * @param walletId - The wallet ID to validate.
+ * @throws BadRequestException if the wallet ID is not a valid UUID.
+ */
 export function validateWalletId(walletId: string): void {
   if (!isUUID(walletId)) {
     throw new BadRequestException('Invalid wallet ID');
   }
 }
 
+/**
+ * Validates the amount for a transaction.
+ * @param amount - The amount to validate.
+ * @param label - A label for the amount (default: 'Amount').
+ * @param mustBePositive - Whether the amount must be positive (default: true).
+ * @throws BadRequestException if the amount is invalid.
+ */
 export function validateAmount(
   amount: number,
   label: string = 'Amount',
@@ -41,6 +53,15 @@ export function validateAmount(
   }
 }
 
+/**
+ * Finds a wallet by ID or throws an exception if not found.
+ * @param walletId - The ID of the wallet to find.
+ * @param walletRepositoryOrManager - The repository or entity manager to use.
+ * @param label - A label for the wallet (default: 'Wallet').
+ * @param useTransaction - Whether to use a transaction (default: false).
+ * @returns The found wallet.
+ * @throws NotFoundException if the wallet is not found.
+ */
 export async function findWalletOrFail(
   walletId: string,
   walletRepositoryOrManager: Repository<Wallet> | EntityManager,
@@ -69,12 +90,27 @@ export async function findWalletOrFail(
   return wallet;
 }
 
+/**
+ * Ensures that a wallet has sufficient balance for a transaction.
+ * @param wallet - The wallet to check.
+ * @param amount - The amount to check against the wallet's balance.
+ * @throws BadRequestException if the wallet balance is insufficient.
+ */
 export function ensureSufficientBalance(wallet: Wallet, amount: number): void {
   if (wallet.balance < amount) {
     throw new BadRequestException('Insufficient balance');
   }
 }
 
+/**
+ * Creates a new transaction and saves it to the database.
+ * @param wallet - The wallet associated with the transaction.
+ * @param amount - The transaction amount.
+ * @param type - The type of transaction (e.g., 'deposit', 'withdrawal', 'transfer').
+ * @param transactionRepository - The repository to save the transaction.
+ * @param toWalletId - The ID of the destination wallet (for transfers only).
+ * @returns The created transaction.
+ */
 export async function createTransaction(
   wallet: Wallet,
   amount: number,

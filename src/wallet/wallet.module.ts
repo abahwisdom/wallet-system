@@ -7,6 +7,9 @@ import { WalletController } from './wallet.controller';
 import { BullModule } from '@nestjs/bullmq';
 import { TransactionProcessor } from './transaction.processor';
 
+/**
+ * Module for managing wallet-related functionality.
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([Wallet, Transaction]),

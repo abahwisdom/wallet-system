@@ -10,9 +10,9 @@ export class IdempotencyRedisService {
   constructor(private readonly redis: RedisService) {}
 
   /**
-   * Retrieves data associated with the idempotency key
-   * @param key The idempotency key
-   * @returns Parsed data or null if not found
+   * Retrieves data associated with the idempotency key.
+   * @param key - The idempotency key.
+   * @returns Parsed data or null if not found.
    */
   async get(key: string): Promise<any> {
     const value = await this.getRedisClient().get(this.formatCacheKey(key));
@@ -20,10 +20,10 @@ export class IdempotencyRedisService {
   }
 
   /**
-   * Stores data associated with the idempotency key
-   * @param key The idempotency key
-   * @param data The data to store
-   * @param ttl Time to live in seconds
+   * Stores data associated with the idempotency key.
+   * @param key - The idempotency key.
+   * @param data - The data to store.
+   * @param ttl - Time to live in seconds.
    */
   async set(key: string, data: any, ttl: number): Promise<void> {
     await this.getRedisClient().set(
@@ -35,10 +35,10 @@ export class IdempotencyRedisService {
   }
 
   /**
-   * Attempts to acquire a lock for the idempotency key
-   * @param key The idempotency key
-   * @param ttl Lock expiration time in seconds
-   * @returns True if lock was acquired, false otherwise
+   * Attempts to acquire a lock for the idempotency key.
+   * @param key - The idempotency key.
+   * @param ttl - Lock expiration time in seconds.
+   * @returns True if lock was acquired, false otherwise.
    */
   async acquireLock(key: string, ttl: number): Promise<boolean> {
     const result = await this.getRedisClient().set(
@@ -53,8 +53,8 @@ export class IdempotencyRedisService {
   }
 
   /**
-   * Releases a previously acquired lock
-   * @param key The idempotency key
+   * Releases a previously acquired lock.
+   * @param key - The idempotency key.
    */
   async releaseLock(key: string): Promise<void> {
     await this.getRedisClient().del(this.formatLockKey(key));

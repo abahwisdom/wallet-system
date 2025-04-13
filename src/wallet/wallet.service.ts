@@ -20,6 +20,9 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 
+/**
+ * Service for managing wallet operations such as deposits, withdrawals, and transfers.
+ */
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
@@ -39,10 +42,20 @@ export class WalletService {
     private readonly redisService: RedisService, // Inject RedisService
   ) {}
 
+  /**
+   * Retrieves the cached balance of a wallet.
+   * @param walletId - The ID of the wallet.
+   * @returns The cached balance or null if not found.
+   */
   async getCachedWalletBalance(walletId: string): Promise<number | null> {
     return getCachedWalletBalance(this.redisService, walletId);
   }
 
+  /**
+   * Sets the cached balance of a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param balance - The balance to cache.
+   */
   async setCachedWalletBalance(
     walletId: string,
     balance: number,
@@ -50,10 +63,22 @@ export class WalletService {
     return setCachedWalletBalance(this.redisService, walletId, balance);
   }
 
+  /**
+   * Invalidates the cached balance of a wallet.
+   * @param walletId - The ID of the wallet.
+   */
   async invalidateWalletBalanceCache(walletId: string): Promise<void> {
     return invalidateWalletBalanceCache(this.redisService, walletId);
   }
 
+  /**
+   * Retrieves the cached transaction history of a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param page - The page number.
+   * @param limit - The number of transactions per page.
+   * @param filterType - Optional filter for transaction type.
+   * @returns The cached transaction history or null if not found.
+   */
   async getCachedTransactionHistory(
     walletId: string,
     page: number,
@@ -69,6 +94,14 @@ export class WalletService {
     );
   }
 
+  /**
+   * Sets the cached transaction history of a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param page - The page number.
+   * @param limit - The number of transactions per page.
+   * @param filterType - Optional filter for transaction type.
+   * @param history - The transaction history to cache.
+   */
   async setCachedTransactionHistory(
     walletId: string,
     page: number,
@@ -86,10 +119,21 @@ export class WalletService {
     );
   }
 
+  /**
+   * Invalidates the cached transaction history of a wallet.
+   * @param walletId - The ID of the wallet.
+   */
   async invalidateTransactionHistoryCache(walletId: string): Promise<void> {
     return invalidateTransactionHistoryCache(this.redisService, walletId);
   }
 
+  /**
+   * Enqueues a transaction job for processing.
+   * @param type - The type of transaction (e.g., 'deposit', 'withdraw').
+   * @param payload - The transaction details.
+   * @param walletId - The ID of the wallet.
+   * @returns The job ID of the enqueued transaction.
+   */
   async enqueueTransaction(
     type: string,
     payload: any,
@@ -129,7 +173,9 @@ export class WalletService {
   }
 
   /**
-   * Creates a new wallet with optional initial balance
+   * Creates a new wallet with an optional initial balance.
+   * @param initialBalance - The initial balance of the wallet (default: 0).
+   * @returns The created wallet.
    */
   async createWallet(initialBalance: number = 0): Promise<Wallet> {
     validateAmount(initialBalance, 'Initial balance', false);
@@ -138,7 +184,10 @@ export class WalletService {
   }
 
   /**
-   * Deposits funds into a wallet
+   * Deposits funds into a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param amount - The amount to deposit.
+   * @returns A message and the job ID of the deposit transaction.
    */
   async deposit(
     walletId: string,
@@ -158,7 +207,10 @@ export class WalletService {
   }
 
   /**
-   * Withdraws funds from a wallet
+   * Withdraws funds from a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param amount - The amount to withdraw.
+   * @returns A message and the job ID of the withdrawal transaction.
    */
   async withdraw(
     walletId: string,
@@ -178,7 +230,11 @@ export class WalletService {
   }
 
   /**
-   * Transfers funds between wallets
+   * Transfers funds between wallets.
+   * @param fromWalletId - The ID of the sender's wallet.
+   * @param toWalletId - The ID of the recipient's wallet.
+   * @param amount - The amount to transfer.
+   * @returns A message and the job ID of the transfer transaction.
    */
   async transfer(
     fromWalletId: string,
@@ -218,7 +274,12 @@ export class WalletService {
   }
 
   /**
-   * Gets paginated transaction history for a wallet
+   * Retrieves paginated transaction history for a wallet.
+   * @param walletId - The ID of the wallet.
+   * @param page - The page number (default: 1).
+   * @param limit - The number of transactions per page (default: 10).
+   * @param filterType - Optional filter for transaction type.
+   * @returns The transaction history and metadata.
    */
   async getTransactionHistory(
     walletId: string,
