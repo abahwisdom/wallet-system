@@ -5,15 +5,17 @@ import {
   ManyToOne,
   CreateDateColumn,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Wallet } from './wallet.entity';
 
 @Entity()
+@Index(['walletId', 'toWalletId', 'type'])
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'int' })
   amount: number;
 
   @Column()

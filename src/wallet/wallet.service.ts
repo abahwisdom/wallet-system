@@ -13,6 +13,8 @@ import {
   getCachedTransactionHistory,
   setCachedTransactionHistory,
   invalidateTransactionHistoryCache,
+  findWalletOrFail,
+  ensureSufficientBalance,
 } from './wallet.utils';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -191,6 +193,14 @@ export class WalletService {
       throw new BadRequestException('Cannot transfer to the same wallet');
     }
 
+    const fromWallet = await findWalletOrFail(
+      fromWalletId,
+      this.walletRepository,
+      'Sender wallet',
+      true,
+    );
+    ensureSufficientBalance(fromWallet, amount);
+
     const jobId = await this.enqueueTransaction(
       'transfer',
       {
@@ -235,22 +245,38 @@ export class WalletService {
       .createQueryBuilder('transaction')
       .orderBy('transaction.createdAt', 'DESC')
       .skip((page - 1) * limit)
-      .take(limit)
-      .where(
+      .take(limit);
+
+    if (!filterType) {
+      query.where(
         '(transaction.walletId = :walletId OR transaction.toWalletId = :walletId)',
         { walletId },
-      ); // Base condition for all related transactions
-
-    if (filterType === 'deposit' || filterType === 'withdrawal') {
-      query.andWhere('transaction.type = :type', { type: filterType });
+      );
     } else if (filterType === 'transfer_in') {
-      query.andWhere('transaction.type = :type', { type: 'transfer' });
-      query.andWhere('transaction.toWalletId = :walletId', { walletId }); // Explicitly filter for incoming transfers
+      query.where(
+        'transaction.type = :type AND transaction.toWalletId = :walletId',
+        {
+          type: 'transfer',
+          walletId,
+        },
+      );
     } else if (filterType === 'transfer_out') {
-      query.andWhere('transaction.type = :type', { type: 'transfer' });
-      query.andWhere('transaction.walletId = :walletId', { walletId }); // Explicitly filter for outgoing transfers
-    } else if (filterType === 'transfer') {
-      query.andWhere('transaction.type = :type', { type: 'transfer' });
+      query.where(
+        'transaction.type = :type AND transaction.walletId = :walletId',
+        {
+          type: 'transfer',
+          walletId,
+        },
+      );
+    } else {
+      // deposit, withdrawal, or transfer (general)
+      query.where(
+        'transaction.type = :type AND transaction.walletId = :walletId',
+        {
+          type: filterType,
+          walletId,
+        },
+      );
     }
 
     const [result, total] = await query.getManyAndCount();

@@ -169,7 +169,7 @@ export async function setCachedTransactionHistory(
     cacheKey,
     JSON.stringify(history),
     'EX',
-    3600, // Cache expires in 1 hour
+    300, // Cache expires in 5 minutes
   );
 }
 
