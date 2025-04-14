@@ -15,7 +15,7 @@ import { TransactionProcessor } from './transaction.processor';
     TypeOrmModule.forFeature([Wallet, Transaction]),
     BullModule.forRoot({
       connection: {
-        host: 'localhost',
+        host: 'redis',
         port: 6379,
       },
     }),

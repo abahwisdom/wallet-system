@@ -300,6 +300,9 @@ export class WalletService {
       | 'transfer_in'
       | 'transfer_out',
   ) {
+    validateWalletId(walletId);
+    await findWalletOrFail(walletId, this.walletRepository, 'Wallet', true);
+
     const cachedHistory = await this.getCachedTransactionHistory(
       walletId,
       page,
