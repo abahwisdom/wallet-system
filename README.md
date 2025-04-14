@@ -18,7 +18,7 @@ The Wallet API is a robust and scalable backend service designed for managing di
    ```
 
 3. **Environment Configuration**:
-   Edit the `.env.example` file in the root directory and rename it to `.env`. Configure the following variables:
+   Edit the `.env.example` file in the root directory and rename it to `.env. Configure the following variables:
 
    ```env
    # Database configuration
@@ -31,7 +31,6 @@ The Wallet API is a robust and scalable backend service designed for managing di
    # Redis configuration (for Bull and caching)
    REDIS_HOST=redis
    REDIS_PORT=6379
-   ```
    ```
 
 4. **Run the Application**:
@@ -84,49 +83,40 @@ The Wallet API is a robust and scalable backend service designed for managing di
 - **Idempotency**: Implemented using Redis to ensure that duplicate transaction requests are not processed multiple times.
 - **Scalability**: The application is designed to scale horizontally by leveraging Redis and stateless APIs.
 
-### SQL Schema
+### Updated SQL Schema
 
 #### Wallets Table
 ```sql
 CREATE TABLE wallets (
-    id SERIAL PRIMARY KEY,
-    user_id UUID NOT NULL,
-    balance BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Unique identifier for the wallet
+    balance INT NOT NULL DEFAULT 0 -- Current balance of the wallet
 );
-
--- Index to quickly find wallets by user_id
-CREATE INDEX idx_wallets_user_id ON wallets(user_id);
 ```
 
 #### Transactions Table
 ```sql
 CREATE TABLE transactions (
-    id SERIAL PRIMARY KEY,
-    wallet_id INT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
-    amount BIGINT NOT NULL,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('credit', 'debit')),
-    reference_id UUID UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Unique identifier for the transaction
+    amount INT NOT NULL, -- Amount involved in the transaction
+    type VARCHAR(50) NOT NULL CHECK (type IN ('deposit', 'withdrawal', 'transfer')), -- Type of transaction
+    status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')), -- Status of the transaction
+    wallet_id UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE, -- Wallet that initiated the transaction
+    to_wallet_id UUID REFERENCES wallets(id), -- Destination wallet (only for transfers)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Timestamp when the transaction was created
 );
 
--- Index to optimize queries by wallet_id
-CREATE INDEX idx_transactions_wallet_id ON transactions(wallet_id);
-
--- Index to ensure quick lookups by reference_id for idempotency
-CREATE UNIQUE INDEX idx_transactions_reference_id ON transactions(reference_id);
+-- Index to optimize queries by wallet_id, to_wallet_id, and type
+CREATE INDEX idx_transactions_wallet_id_to_wallet_id_type ON transactions(wallet_id, to_wallet_id, type);
 ```
 
 ### Indexes and Constraints
 
 - **Indexes**:
-  - `idx_wallets_user_id`: Speeds up queries to find wallets by `user_id`.
-  - `idx_transactions_wallet_id`: Optimizes queries to fetch transactions for a specific wallet.
-  - `idx_transactions_reference_id`: Ensures idempotency by preventing duplicate `reference_id` values.
+  - `idx_transactions_wallet_id_to_wallet_id_type`: Optimizes queries by `wallet_id`, `to_wallet_id`, and `type`.
 
 - **Constraints**:
   - `FOREIGN KEY (wallet_id)`: Maintains referential integrity between `transactions` and `wallets`.
+  - `FOREIGN KEY (to_wallet_id)`: Ensures referential integrity for transfer transactions.
 
 ### Additional Notes
 
