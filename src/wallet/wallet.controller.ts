@@ -13,28 +13,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { WalletService } from './wallet.service';
-import { IsNumber, IsPositive } from 'class-validator';
 import { Observable } from 'rxjs';
 import { map, filter } from 'rxjs/operators';
 import { transactionStatusSubject } from './wallet.utils';
-
-export class CreateWalletDto {
-  @IsNumber()
-  @IsPositive()
-  initialBalance: number;
-}
-
-export class TransactionDto {
-  @IsNumber()
-  @IsPositive()
-  amount: number;
-}
-
-export class TransferDto {
-  @IsNumber()
-  @IsPositive()
-  amount: number;
-}
+import { CreateWalletDto } from './dto/create-wallet.dto';
+import { TransactionDto } from './dto/transaction.dto';
+import { TransferDto } from './dto/transfer.dto';
+import { ApiBody } from '@nestjs/swagger';
 
 const logger = new Logger('WalletController');
 
@@ -51,8 +36,12 @@ export class WalletController {
    * @returns The created wallet.
    */
   @Post()
+  @ApiBody({
+    type: CreateWalletDto,
+    required: false,
+  })
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async createWallet(@Body() createWalletDto: CreateWalletDto) {
+  async createWallet(@Body() createWalletDto?: CreateWalletDto) {
     return this.walletService.createWallet(createWalletDto.initialBalance);
   }
 
