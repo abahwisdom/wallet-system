@@ -219,6 +219,14 @@ export class WalletService {
     validateWalletId(walletId);
     validateAmount(amount);
 
+    const userWallet = await findWalletOrFail(
+      walletId,
+      this.walletRepository,
+      'Wallet',
+      true,
+    );
+    ensureSufficientBalance(userWallet, amount);
+
     const jobId = await this.enqueueTransaction(
       'withdraw',
       { walletId, amount },

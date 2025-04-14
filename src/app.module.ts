@@ -4,8 +4,10 @@ import { WalletModule } from './wallet/wallet.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { IdempotencyInterceptor, IdempotencyModule } from './idempotency';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { RedisModule } from '@liaoliaots/nestjs-redis';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { RedisModule, RedisService } from '@liaoliaots/nestjs-redis';
+import { ThrottlerModule, ThrottlerGuard, seconds } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 
 @Module({
   imports: [
@@ -28,11 +30,30 @@ import { RedisModule } from '@liaoliaots/nestjs-redis';
         port: parseInt(process.env.REDIS_PORT, 10) || 6379,
       },
     }),
+    ThrottlerModule.forRootAsync({
+      inject: [RedisService],
+      useFactory: async (redisService: RedisService) => {
+        const redisClient = redisService.getOrThrow(); // get the default Redis client
+        return {
+          throttlers: [
+            {
+              ttl: seconds(60),
+              limit: 10,
+            },
+          ],
+          storage: new ThrottlerStorageRedisService(redisClient),
+        };
+      },
+    }),
   ],
   providers: [
     {
       provide: APP_INTERCEPTOR,
       useClass: IdempotencyInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })
